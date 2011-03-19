@@ -1,0 +1,16 @@
+PPT over HTTP
+-------------------------------
+There are a lot of phone applications which allow the control of ppt over wifi and bluetooth but in some cases this is not possible particularly when at a conference or other area where bluetooth may not be available and the wifi may have restrictions for user devices.
+
+In those cases it would be preferrable to tunnel the ppt commands over http.  The goal of this service is to allow any device to register a ppt presentation and receive an ID.  This ID is then used to put presentation commands into to the web-service.  On the other end, wherever the ppt is running should long poll the web-service so that commands can be retreived instantly.  Ultimately this will require a web framework meant to work well with long polling such as tornado but since I am just learning app-engine the built-in one is fine.
+
+The near-term goal is to support one-way communication from the client to the ppt server.  The ideal case is the server registering so that its ID can be retreived and display on the screen as well as set some initial registration options such as the number of slides and any other important data which can be retreived by the client when initially connecting to the session.  
+
+Once the id is fed into the ppt controller (client), it will put to /service/present url every time it has a new command to issue.  Simulatenously the client should be long-polling /service/present and any data will be immediately fed through.
+
+# Goals
+Short-term goals: basic web stuff works if done by hand, no long polling implemented
+Mid-term goals: .NET application which can control power-point when service is manually queried for left and right
+Long-term goals: android client application
+Longest-term goals: can this be impelemented for google presentation?
+
