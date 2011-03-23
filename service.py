@@ -30,7 +30,7 @@ class RegisterHandler(webapp.RequestHandler):
       self.error(404)                                               # we do a 404
     else:
       presentation.delete()                                         
-      set_status(204)                                               # Otherwise, we delet eit and send a 204 code which means no content
+      self.response.set_status(204)                                 # Otherwise, we delete it and send a 204 code which means no content 
     
 
 # Handles the present page
@@ -60,7 +60,7 @@ class PresentHandler(webapp.RequestHandler):
     if (presentation == None):
       self.error(404)                                               # doesn't exist, out of luck send the 404
     else:
-      set_status(204)                                               # No Content is sent so we send a 204 to indicate success
+      self.response.set_status(204)                                 # No Content is sent so we send a 204 to indicate success
 
 # Models a presentation
 class Presentation(db.Model):
