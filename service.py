@@ -48,10 +48,16 @@ class PresentHandler(webapp.RequestHandler):
     else:
       # Print the template
       self.response.headers['Content-Type'] = 'text/plain'
-      self.response.out.write("present: ")
+      self.response.out.write("Present: ")
       self.response.out.write(pptId)
-      self.response.out.write("\ncreated: ")
+      self.response.out.write("\nCreated: ")
       self.response.out.write(presentation.DateCreated)
+      self.response.out.write("\nName: ")
+      self.response.out.write(presentation.Name)
+      self.response.out.write("\nSlides: ")
+      self.response.out.write(presentation.NumberSlides)
+      self.response.out.write("\nAction: ")
+      self.response.out.write(presentation.Actions)
 
   # Puts a new event for this id
   # This will be a one-off request made by an android app or something
@@ -65,55 +71,55 @@ class PresentHandler(webapp.RequestHandler):
 
 # Models a presentation
 class Presentation(db.Model):
-  DateCreated = db.DateTimeProperty(auto_now_add = True)   	# The date/time this presentation was created
-  NumberSlides = db.IntegerProperty()						# Number of slides in this presentation
-  Name = db.StringProperty()								# Name of presentation  
+  DateCreated = db.DateTimeProperty(auto_now_add = True)       # The date/time this presentation was created
+  NumberSlides = db.IntegerProperty()                        # Number of slides in this presentation
+  Name = db.StringProperty()                                # Name of presentation  
   # Each Action is in the form of G Action
   # IE: Previous is GP, Next is GN, First is G1, Last is GE, and any number is G##
-  Actions = db.StringProperty()								# For simplicity we are using the string as an action storage method this is at least for now
+  Actions = db.StringProperty()                                # For simplicity we are using the string as an action storage method this is at least for now
   
   # Pushes a previous action onto the action list
   # If preceded by a next action, the next action is removed and this action is ignored
-  def PushPreviousAction():	    
-    if (Actions.count('G') > 1 and Actions[-2:] == "GN"):
-	    Actions = Actions[:-2]	   
-    else:	   
-        Actions += "GP"
-	
+  def PushPreviousAction(self):        
+    if (self.Actions.count('G') > 1 and self.Actions[-2:] == "GN"):
+        self.Actions = self.Actions[:-2]       
+    else:       
+        self.Actions += "GP"
+    
   # Pushes a next action onto the action list
   # If preceded by a previous action, the previous action is removed and this action is ignored
-  def PushNextAction():
-    if (Actions.count('G') > 1 and Actions[-2:] == "GP"):
-	    Actions = Actions[:-2]	    
-	else:
-	    Actions += "GN"
-	
+  def PushNextAction(self):
+    if (self.Actions.count('G') > 1 and self.Actions[-2:] == "GP"):
+        self.Actions = self.Actions[:-2]        
+    else:
+        self.Actions += "GN"
+    
   # Pushes a first action onto the action list
   # Will remove all actions in the action list
-  def PushFirstAction():
-     Actions = "G1"
-	
+  def PushFirstAction(self):
+     self.Actions = "G1"
+    
   # Pushes an end action onto the action list
   # Will remove all actions in the action list
-  def PushLastAction():
-     Actions = "G" + NumberSlides
-	
+  def PushLastAction(self):
+     self.Actions = "G" + self.NumberSlides
+    
   # Pushs a goto action onto the action list
   # Will remove all actions in the action list
-  def PushGotoAction(slide_num):
-    if (slide_num > NumberSlides || slide_num < 1):
-		raise IndexError("Slide Number Is Invalid")
-	Actions = "G" + slide_num
+  def PushGotoAction(self,slide_num):
+    if (slide_num > self.NumberSlides || slide_num < 1):
+        raise IndexError("Slide Number Is Invalid")
+    self.Actions = "G" + slide_num
   
   # PopAllActions
   # Returns the current action string
   # Then sets it to ''.  
   # The idea being the presentation long-poller will retrieve all actions to perform at once
   # TODO: Sometime we'll have to deal with the concurrency issues that will inevitabbly pop up
-  def PopAllActions():
-    t = Actions
-    Actions = ''
-	return t
+  def PopAllActions(self):
+    t = self.Actions
+    self.Actions = ''
+    return t
   
 
 # Application Object
