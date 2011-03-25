@@ -2,15 +2,50 @@ PPT over HTTP
 -------------------------------
 There are a lot of phone applications which allow the control of ppt over wifi and bluetooth but in some cases this is not possible particularly when at a conference or other area where bluetooth may not be available and the wifi may have restrictions for user devices.
 
-In those cases it would be preferrable to tunnel the ppt commands over http.  The goal of this service is to allow any device to register a ppt presentation and receive an ID.  This ID is then used to put presentation commands into to the web-service.  On the other end, wherever the ppt is running should long poll the web-service so that commands can be retreived instantly.  Ultimately this will require a web framework meant to work well with long polling such as tornado but since I am just learning app-engine the built-in one is fine.
+In those cases it would be preferrable to tunnel the ppt commands over http.  The goal of this service is to allow a device to register a presentation and receive a PPT ID.  This ID is then used to push presentation commands over http into the web-service by a handheld device such as a phone.  On the presentation end one of two cases should occur:
+ * If google docs like: an ajax request should be made to long poll the service waiting for command input.  Once received the command should be executed and another long poll should occur.
+ * If microsoft ppt like: an external application should be long poll the service waiting for command input.  Once received the command shoould be performed via the interop libraries then another long poll should occur
+Ultimately this will require a web framework meant to work well with long polling such as tornado but since I am just learning app-engine the built-in one is fine.
 
-The near-term goal is to support one-way communication from the client to the ppt server.  The ideal case is the server registering so that its ID can be retreived and display on the screen as well as set some initial registration options such as the number of slides and any other important data which can be retreived by the client when initially connecting to the session.  
+The current implementation allows a server to register a presentation at /service/register (details of the web methods are below). The ID of the presentation is returned through JSON.  
+This id is then used by the client to post commands (defined below) to /service/present/{id}
+The server then performs a get request on /service/prsent/{id} to retreive any waiting commands which are returned via JSON
 
-Once the id is fed into the ppt controller (client), it will put to /service/present url every time it has a new command to issue.  Simulatenously the client should be long-polling /service/present and any data will be immediately fed through.
+Goals
+---------------------
+Short-term goals: basic web stuff works even if done by hand, no long polling implemented, just a proof of concept
+Mid-term goals: .NET application which can control power-point (I'd do google docs, but can't exactly inject my scripts into the page or control the presentation easily) using the web-service.  At this point probably still push commands to the server by hand
+Mid-Long term goal: android client application, this is a longer-term goal because it requires me to write an android app which I haven't done before
+Long-term goal: Once its clear it works, either study up on how I can control the google presentation (if its even possible).  Or work for google and be able to actually implement it :)
 
-# Goals
-Short-term goals: basic web stuff works if done by hand, no long polling implemented
-Mid-term goals: .NET application which can control power-point when service is manually queried for left and right
-Long-term goals: android client application
-Longest-term goals: can this be impelemented for google presentation?
+TODO
+--------------------
+ * Need to look into concurrency issues, most definitely need to use database transactions.  This can wait for now but must be addressed in the long-term.  The transactions API is pretty straight-forward should be an easy modification.
 
+Documentation
+---------------------
+1. Files
+1.1 home.py - A landing page write now, uses index.html to serve a static http page which has a form that can be used to register a new ppt.  Just for testing nothing special
+1.2 service.py - The actual service implementation implements anything for /service
+1.3 presentation.py - The presentation data model stored in the google database, also defines some support functions to ease interaction
+1.4 test_env_setup - Bash script which if run using '. ./test_env_setup' will export a bunch of commands into the shell which interact with the web-service via curl.  Explained in detail in section 4
+1.5 index.html - Basic landing page, this will be fledge out later
+
+2. Service
+2.1 Registration - Occurs at end-point /service/register/[id].  Id is optional and is not required when performing a get request (Note: I may change some of this routing later we'll see)
+2.1.1 GET - /service/register/{id} - Returns a JSON object with the presentation details including Name, NumberSlides, DateCreated, and Actions
+2.1.2 POST - /service/register - Requires 'name' and 'slides' post variables.  Returns a JSON object with id set to the ppt id
+2.1.3 DELETE - /service/register/{id} - Deletes the presentation out of the database. Currently the ids are sequential... so you can wreck havoc if someone really wanted to we'll see if this needs to be addressed much later
+2.2 Presentation - Occurs at end-point /service/present/{id}
+2.2.1 GET - /service/present/{id} - Returns a json object containing the actions to be executed by the server.  This the polling point for the server.  A successful request clears the action queue
+2.2.2 POST - /service/present/{id} - Posts a new action to the queue for the given presentation.  Actions are discussed in section 3.
+
+3. Actions - All actions are posted to the server at /service/present/{id} using the form variable action={action}
+3.1 prev - Posts a previous command to the server, if directly preceeded by a next command this action deletes the next command and is ignored
+3.2 next - Posts a next command to the server, if directly preceeded by a prev command this action deletes the prev command and is ignored
+3.3 first - Moves to the first slide in the presentation, clears any existing actions in the queue
+3.4 last - Moves to the last slide in the presentation, clears any existing actions in the queue
+3.5 goto - Goes to a slide in the presentation, in addition to action=goto the slide=# must also be included in the post data.  If slide is more than the number of slides possible a 500 status code is returned indicating failure.
+
+4. Manual Test Environment
+- Will write this at next commit

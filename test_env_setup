@@ -1,0 +1,93 @@
+#!/bin/bash
+# This should define a few helper methods for easy testing
+
+# The URLS
+ppt_local_url="http://localhost:8080"
+ppt_remote_url="http://ppt-http.appspot.com"
+
+# The current global url
+ppt_url=$ppt_local_url
+
+# Creates a new PPT
+function ppt_newppt {
+  local name=${1-"default"}
+  local slides=${2-"10"}
+  curl -v $ppt_url/service/register --data name=$name --data slides=$slides
+  echo
+}
+
+# Gets a PPT
+function ppt_getppt {
+  local pptid=${1:?"pptid is required"}
+  if [[ -z $pptid ]]
+  then
+    echo "No PPT ID Specified"
+  else
+    curl -v $ppt_url/service/register/$pptid 
+    echo
+  fi
+}
+
+# Deletes a PPT
+function ppt_deleteppt {
+  local pptid=${1:?"pptid is required"}
+  if [[ -z $pptid ]]
+  then
+    echo "No PPT ID Specified"
+  else
+    curl -X DELETE -v $ppt_url/service/register/$1
+    echo
+  fi
+}
+
+# Push an action for this ppt
+function ppt_pushaction {
+  local pptid=${1:?"pptid is required"}
+  local action=${2:?"action is required"}
+  if [[ -z $pptid ]]
+  then
+    echo "No PPT ID Specified"
+  elif  [[ -z $action ]]
+  then
+    echo "No Action Specified"
+  else
+    curl -v $ppt_url/service/present/$1 --data action=$2
+    echo
+  fi
+}
+# Push a goto action for this ppt
+function ppt_pushgoto {
+  local pptid=${1:?"pptid is required"}
+  local slide=${2:?"slide is required"}
+  if [[ -z $pptid ]]
+  then
+    echo "No PPT ID Specified"
+  elif  [[ -z $slide ]]
+  then
+    echo "No Slide Specified"
+  else
+    curl -v $ppt_url/service/present/$1 --data action=goto --data slide=$2
+    echo
+  fi
+}
+# Pop all actions from this ppt
+function ppt_popall {
+  local pptid=${1:?"pptid is required"}
+  if [[ -z $pptid ]]
+  then
+    echo "No PPT ID Specified"
+  else
+    curl -v $ppt_url/service/present/$1
+    echo
+  fi
+}
+  
+export ppt_url
+export ppt_local_url
+export ppt_remote_url
+export -f ppt_newppt
+export -f ppt_deleteppt
+export -f ppt_getppt
+export -f ppt_pushaction
+export -f ppt_pushgoto
+export -f ppt_popall
