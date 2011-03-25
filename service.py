@@ -2,6 +2,7 @@
 import os
 import cgi
 import datetime
+import Queue
 
 # Web App Stuff
 from google.appengine.ext import db
@@ -15,7 +16,7 @@ class RegisterHandler(webapp.RequestHandler):
   # Gets a new session id generated for 
   # Use and types it
   # the secondary parameter is unused since we are retreving a new registration id
-  def get(self,unused):
+  def post(self,unused):
     # Create a new presentation and return the key
     p = Presentation()
     p.put()                                                         # creates a default basic presentation
@@ -64,7 +65,56 @@ class PresentHandler(webapp.RequestHandler):
 
 # Models a presentation
 class Presentation(db.Model):
-  DateCreated = db.DateTimeProperty(auto_now_add = True)   # The date/time this presentation was created
+  DateCreated = db.DateTimeProperty(auto_now_add = True)   	# The date/time this presentation was created
+  NumberSlides = db.IntegerProperty()						# Number of slides in this presentation
+  Name = db.StringProperty()								# Name of presentation  
+  # Each Action is in the form of G Action
+  # IE: Previous is GP, Next is GN, First is G1, Last is GE, and any number is G##
+  Actions = db.StringProperty()								# For simplicity we are using the string as an action storage method this is at least for now
+  
+  # Pushes a previous action onto the action list
+  # If preceded by a next action, the next action is removed and this action is ignored
+  def PushPreviousAction():	    
+    if (Actions.count('G') > 1 and Actions[-2:] == "GN"):
+	    Actions = Actions[:-2]	   
+    else:	   
+        Actions += "GP"
+	
+  # Pushes a next action onto the action list
+  # If preceded by a previous action, the previous action is removed and this action is ignored
+  def PushNextAction():
+    if (Actions.count('G') > 1 and Actions[-2:] == "GP"):
+	    Actions = Actions[:-2]	    
+	else:
+	    Actions += "GN"
+	
+  # Pushes a first action onto the action list
+  # Will remove all actions in the action list
+  def PushFirstAction():
+     Actions = "G1"
+	
+  # Pushes an end action onto the action list
+  # Will remove all actions in the action list
+  def PushLastAction():
+     Actions = "G" + NumberSlides
+	
+  # Pushs a goto action onto the action list
+  # Will remove all actions in the action list
+  def PushGotoAction(slide_num):
+    if (slide_num > NumberSlides || slide_num < 1):
+		raise IndexError("Slide Number Is Invalid")
+	Actions = "G" + slide_num
+  
+  # PopAllActions
+  # Returns the current action string
+  # Then sets it to ''.  
+  # The idea being the presentation long-poller will retrieve all actions to perform at once
+  # TODO: Sometime we'll have to deal with the concurrency issues that will inevitabbly pop up
+  def PopAllActions():
+    t = Actions
+    Actions = ''
+	return t
+  
 
 # Application Object
 application = webapp.WSGIApplication( 
