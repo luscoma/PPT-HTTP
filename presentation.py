@@ -16,6 +16,8 @@ class Presentation(db.Model):
   # Each Action is in the form of G Action
   # IE: Previous is GP, Next is GN, First is G1, Last is GE, and any number is G##
   Actions = db.StringProperty('')                              # For simplicity we are using the string as an action storage method this is at least for now
+  Token = db.StringProperty()                                  # The token to identify the client id
+  LastHeartBeat = db.DateTimeProperty(auto_now_add = True)     # The date/time this presentation last received a heart beat
 
   # Make sure actions is initialized
   def __checkAction(self):
@@ -27,19 +29,22 @@ class Presentation(db.Model):
   def PushPreviousAction(self):        
     self.__checkAction()
     if (self.Actions.count('G') > 0 and self.Actions[-2:] == "GN"):
-        self.Actions = self.Actions[:-2]       
-    else:       
-        self.Actions += "GP"
+      self.Actions = self.Actions[:-2]       
+    elif self.Token:            # If theres a token they don't need a list of actions, it will be sent over the channel instantly
+      self.Actions = "GP"
+    else:                       # Otherwise, we append since they will be using the standard pop interface
+      self.Actions += "GP"
     
   # Pushes a next action onto the action list
   # If preceded by a previous action, the previous action is removed and this action is ignored
   def PushNextAction(self):
     self.__checkAction()
     if (self.Actions.count('G') > 0 and self.Actions[-2:] == "GP"):
-        print "ACT Fix: " + self.Actions[:-2]
-        self.Actions = self.Actions[:-2]        
+      self.Actions = self.Actions[:-2]        
+    elif self.Token:
+      self.Actions = "GN"     # If theres a token, it will be sent instantly so no need to append
     else:
-        self.Actions += "GN"
+      self.Actions += "GN"    # Otherwise, we append since they will be using the standard pop interface
     
   # Pushes a first action onto the action list
   # Will remove all actions in the action list

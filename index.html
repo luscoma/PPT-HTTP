@@ -1,15 +1,26 @@
 <html>
   <head>
     <title>PPT Over HTTP</title>
+
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js"></script>
+    <script type="text/javascript" src="/static/json2.js"></script>
+    <script type="text/javascript" src="/_ah/channel/jsapi"></script>
+    <script type="text/javascript" src="/static/ppt-http.js"></script>
   </head>
   <body>
     <h1>PPT Over HTTP</h1>
     <p>Current in testing</p>
 
-    <form action="/service/register" method="POST">
-      <input type="text" name="name"/>
-      <input type="text" name="slides"/>
-      <input type="submit" name="submit" value="Submit"/>
-    </form>
+    <p>A List of Commands Received From the Server</p>
+    <ul id="list">
+    </ul>
+
+    <script type="text/javascript">
+      service = PPTHTTP.register("Test",30)
+      service.onNext = function() { $("<li>Next</li>").prependTo("#list"); }
+      service.onPrev = function() { $("<li>Previous</li>").prependTo("#list"); }
+      service.onGoto = function(slide) { $("<li>Goto: " + slide + "</li>").prependTo("#list"); }
+      console.log(service);
+    </script>
   </body>
 </html>

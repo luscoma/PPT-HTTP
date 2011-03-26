@@ -7,6 +7,7 @@ from presentation import Presentation     # Presentation data model
 # Web App Stuff
 from google.appengine.ext import db
 from google.appengine.ext import webapp
+from google.appengine.api import channel
 from google.appengine.ext.webapp.util import run_wsgi_app
 from django.utils import simplejson
 
@@ -33,6 +34,7 @@ class RegisterHandler(webapp.RequestHandler):
     # Get the post parameters and ensure they are valid
     name = self.request.get('name')                                 # Name of presentation
     num_slides = self.request.get('slides')                         # Number of slides
+    enable_channel = self.request.get('channel')                    # Channel enables the use of the channel API
 
     if (name == '' or not num_slides.isdigit()):                       # If the parameters aren't correct then let them know
       self.error(500)
@@ -40,8 +42,13 @@ class RegisterHandler(webapp.RequestHandler):
     else:
       p = Presentation(Name=name, NumberSlides=int(num_slides))     # Create a new presentation
       p.put()                                                       # creates a default basic presentation
+
+      if enable_channel:                                            # if channel is provided at all, then we create a channel token and update the data structure
+        p.Token = channel.create_channel(str(p.key().id()));    
+        p.put()
+
       self.response.headers['Content-Type'] = 'application/json'
-      self.response.out.write(simplejson.dumps({"id": p.key().id()})) # Send out the json id
+      self.response.out.write(simplejson.dumps({"id": p.key().id(), "token": p.Token})) # Send out the json id and optional channel token
 
   # Deletes a session id if exists
   # This will signify the end of a session
@@ -83,7 +90,6 @@ class PresentHandler(webapp.RequestHandler):
 
   # Posts a new action for this id
   # This will be a one-off request made by an android app or something
-  VALID_ACTIONS = ('prev','next','first','last','goto')           # "Constant" list of valid actions
   def post(self, pptId):
     # Get the required post parameters
     action = self.request.get('action').lower()
@@ -91,17 +97,19 @@ class PresentHandler(webapp.RequestHandler):
 
     # Check if this is a valid action
     try:
-      self.VALID_ACTIONS.index(action)                            # Check to make sure its a valid action (throws a ValueError if not in the tupple
-
       if action == "goto" and not slide.isdigit():                # Do a specific check for the goto command to ensure the slide value is a digit
         self.error(500)
         self.response.out.write("Goto action requires the 'slide' parameter which must be a number\n")
       else:
         result = db.run_in_transaction(self.__transactionPushAction, pptId, action, slide)
-        if not result:                                            # if result is false, we return 404
+        if not result[0]:                                         # if result is false, we return 404
           self.error(404)
         else:
           self.response.set_status(204)                           # Assuming everything ends up okay, we will set the status to 204 to indicate no content but sucess
+
+          # Check for channel
+          if result[2]:                                           # If the token parameter isn't null or '' then lets push out to the token
+            channel.send_message(pptId, simplejson.dumps({ "Actions": result[1] }))
     except ValueError:
       self.error(500)
       self.response.out.write("Invalid action, must be prev, next, first, last, or goto")
@@ -111,12 +119,12 @@ class PresentHandler(webapp.RequestHandler):
 
   # Pushes an action atomically onto a presentation
   # action and slide are the request parameters, slide is only required when action goto
-  # returns False if key wasn't found, true if we succeeded
+  # returns False if key wasn't found, true if we succeeded also the channel token and current actions so we don't have to re-request this item from the db
   def __transactionPushAction(self, pptId, action, slide):
     key = db.Key.from_path('Presentation',int(pptId))               # find the key if it exists, must convert pptId to integer
     presentation = db.get(key)                                      # find the presentation
     if (presentation == None):                                      # doesn't exist return False
-      return False
+      return (False)
 
     # Find the proper action
     if action == 'prev':                                            
@@ -132,14 +140,34 @@ class PresentHandler(webapp.RequestHandler):
     else:
       raise ValueError("Action Invalid")                            # Throw a value error to indicate an invalid action
 
+    # Do a final check, are we going to be using a channel to submit data?
+    # If so we should clear the action list, maybe ultimately we can just only use channels
+    # But for now we will support both since the channel API only works in javascript
+    actions = presentation.Actions
+    if presentation.Token:
+      presentation.Actions = ''
     presentation.put()                                              # Commit the changes
-    return True                                                     # return True to indicate we did something successfully
+    return (True, actions, presentation.Token)                      # return True to indicate we did something successfully
+
+# Manages a heartbeat for an application
+class HeartbeatHandler(webapp.RequestHandler):
+  # Updates the heartbeat
+  def get(self, pptId):
+    key = db.Key.from_path('Presentation',int(pptId))
+    presentation = db.get(key)
+    if (presentation == None):
+      self.error(404)
+    else:
+      presentation.HeartBeat = datetime.datetime.utcnow()
+      presentation.put()
+      self.response.set_status(204)
 
 # Application Object
 application = webapp.WSGIApplication( 
                           [
                             ('/service/register(?:/(\d+))?', RegisterHandler),
                             ('/service/present/(\d+)', PresentHandler),
+                            ('/service/heartbeat/(\d+)', HeartbeatHandler)
                           ]
                           ,debug=True)
 

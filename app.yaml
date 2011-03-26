@@ -12,3 +12,6 @@ handlers:
 
 - url: /service/.*
   script: service.py
+
+- url: /static
+  static_dir: static

@@ -20,8 +20,8 @@ Long-term goal: Once its clear it works, either study up on how I can control th
 
 TODO
 --------------------
-* Change to use the channel API and implement a javascript page which acts like the server and waits for actions, will also require some type of heartbeat message
-* Work on controlling powerpoint via .net interop and manual commands sent to the web-service (not possible right now, easily, if we switch to the channel API until its available in non-javascript clients)
+* Do cron task which deletes old data items that have expired (in accordance to the heartbeat)
+* Work on controlling powerpoint via .net interop and manual commands sent to the web-service (not possible right now, easily, if we switch to the channel API until its available in non-javascript clients.  We could ghetto long-poll but wheres the fun in that)
 
 Documentation
 ---------------------
