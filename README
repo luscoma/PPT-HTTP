@@ -21,7 +21,7 @@ Long-term goal: Once its clear it works, either study up on how I can control th
 TODO
 --------------------
 * Do cron task which deletes old data items that have expired (in accordance to the heartbeat)
-* Work on controlling powerpoint via .net interop and manual commands sent to the web-service (not possible right now, easily, if we switch to the channel API until its available in non-javascript clients.  We could ghetto long-poll but wheres the fun in that)
+* Work on controlling powerpoint via .net interop and manual commands sent to the web-service (not easily possible right now since the channel api is javascript only.  Would have to embed a web browser and do some nastiness)
 
 Documentation
 ---------------------
@@ -34,12 +34,12 @@ Documentation
 
 2. Service
 2.1 Registration - Occurs at end-point /service/register/[id].  Id is optional and is not required when performing a get request (Note: I may change some of this routing later we'll see)
-2.1.1 GET - /service/register/{id} - Returns a JSON object with the presentation details including Name, NumberSlides, DateCreated, and Actions
-2.1.2 POST - /service/register - Requires 'name' and 'slides' post variables.  Returns a JSON object with id set to the ppt id
+2.1.1 GET - /service/register/{id} - Returns a JSON object with the presentation details including Name, NumberSlides, DateCreated
+2.1.2 POST - /service/register - Requires 'name' and 'slides' post variables.  Returns a JSON object with id set to the ppt id and a channel id token
 2.1.3 DELETE - /service/register/{id} - Deletes the presentation out of the database. Currently the ids are sequential... so you can wreck havoc if someone really wanted to we'll see if this needs to be addressed much later
 2.2 Presentation - Occurs at end-point /service/present/{id}
-2.2.1 GET - /service/present/{id} - Returns a json object containing the actions to be executed by the server.  This the polling point for the server.  A successful request clears the action queue
 2.2.2 POST - /service/present/{id} - Posts a new action to the queue for the given presentation.  Actions are discussed in section 3.
+2.3 Channel -  used for communication back with the presentation web page, see google channel api documentation.  The channel token is returned during registration.
 
 3. Actions - All actions are posted to the server at /service/present/{id} using the form variable action={action}
 3.1 prev - Posts a previous command to the server, if directly preceeded by a next command this action deletes the next command and is ignored
@@ -59,4 +59,3 @@ Documentation
 4.2.3 ppt_deleteppt pptid - deletes the presentation out of the database
 4.2.4 ppt_pushaction pptid action - pushes an action specified in section 3 to the presentations queue, not used for goto
 4.2.5 ppt_gotoaction pptid slide - pushes a goto action onto the presentations action queue given the slide #
-4.2.6 ppt_popall pptid - pops the actions off of the action queue and returns the action string

@@ -12,12 +12,11 @@ PPTHTTP = {};
 // Actual Fun Stuff
 (function() { // URL Local Stuff
   //var URL = "http://ppt-http.appspot.com";
-  var URL = "http://localhost:8080";
   function MakeURL(cmd, id)
   {
     if (id === undefined) 
-      return URL + "/service/" + cmd; 
-    return URL + "/service/" + cmd + "/" + id;
+      return "/service/" + cmd; 
+    return "/service/" + cmd + "/" + id;
   }
 
   this.Service = function() {
@@ -84,6 +83,11 @@ PPTHTTP = {};
           this.Socket = this.Channel.open();
           this.Socket.onopen = function() { console.log("opened"); };
           this.Socket.onmessage = function(message) { me.parse(JSON.parse(message.data).Action); };
+          this.Socket.onerror = function() { console.log('error'); };
+          this.Socket.onclose = function() { console.log('closed'); };
+
+          // Ready Function
+          if ($.isFunction(this.ready)) { this.ready(); }
 
           // HeartBeat
           this._hb = setInterval(function() { me.heartbeat(); }, 30000);
