@@ -70,17 +70,6 @@ function ppt_pushgoto {
     echo
   fi
 }
-# Pop all actions from this ppt
-function ppt_popall {
-  local pptid=${1:?"pptid is required"}
-  if [[ -z $pptid ]]
-  then
-    echo "No PPT ID Specified"
-  else
-    curl -v $ppt_url/service/present/$1
-    echo
-  fi
-}
   
 export ppt_url
 export ppt_local_url

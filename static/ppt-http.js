@@ -10,9 +10,7 @@
 PPTHTTP = {};
 
 // Actual Fun Stuff
-(function() {
-  
-  // URL Local Stuff
+(function() { // URL Local Stuff
   //var URL = "http://ppt-http.appspot.com";
   var URL = "http://localhost:8080";
   function MakeURL(cmd, id)
@@ -33,9 +31,10 @@ PPTHTTP = {};
     // we should just make a simple request to /service/heartbeat to say were here
     // In the future stuffl ike this will all have to be jsonp but whatever for now
     $.get(MakeURL("heartbeat",this.Id));
+    console.log("Heart Beat");
   }
   // Parses a list of actions and calls the appropriate functions
-  this.Service.prototype.parse = function(actions) {
+  this.Service.prototype.parse = function(action) {
     // defined a utility function which checks for integer
     function isInt(x) {
       var y=parseInt(x); 
@@ -44,15 +43,11 @@ PPTHTTP = {};
     }
 
     // Split and loop through the actions
-    me = this;  // each overrides this, so we store the current this as me              
-    console.log(actions);
-    var split_actions = actions.split('G').splice(1);
-    $.each(split_actions, function(idx, cmd)
-    {
-      if (cmd == "N" && $.isFunction(me.onNext)) {  me.onNext(); }
-      else if (cmd == "P" && $.isFunction(me.onPrev)) {  me.onPrev(); }
-      else if (isInt(cmd) && $.isFunction(me.onGoto)) { me.onGoto(parseInt(cmd)); }
-    });
+    console.log(action);
+    cmd = action.substring(1)
+    if (cmd == "N" && $.isFunction(me.onNext)) {  this.onNext(); }
+    else if (cmd == "P" && $.isFunction(me.onPrev)) {  this.onPrev(); }
+    else if (isInt(cmd) && $.isFunction(me.onGoto)) { this.onGoto(parseInt(cmd)); }
   }
   this.Service.prototype.delete = function() {
       $.ajax({
@@ -88,7 +83,7 @@ PPTHTTP = {};
           this.Channel = new goog.appengine.Channel(this.Token);
           this.Socket = this.Channel.open();
           this.Socket.onopen = function() { console.log("opened"); };
-          this.Socket.onmessage = function(message) { me.parse(JSON.parse(message.data).Actions); };
+          this.Socket.onmessage = function(message) { me.parse(JSON.parse(message.data).Action); };
 
           // HeartBeat
           this._hb = setInterval(function() { me.heartbeat(); }, 30000);

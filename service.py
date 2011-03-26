@@ -24,8 +24,8 @@ class RegisterHandler(webapp.RequestHandler):
     if (presentation == None):
       self.error(404)                                               # doesn't exist, out of luck send the 404
     else:
-      self.response.headers['Content-Type'] = 'application/json'
-      self.response.out.write(simplejson.dumps(presentation.ToDictionary()))
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.out.write(simplejson.dumps(presentation.ToDictionary()))
 
   # Requests a new presentation id to be generated 
   # the secondary parameter is unused since we are retreving a new registration id
@@ -34,7 +34,6 @@ class RegisterHandler(webapp.RequestHandler):
     # Get the post parameters and ensure they are valid
     name = self.request.get('name')                                 # Name of presentation
     num_slides = self.request.get('slides')                         # Number of slides
-    enable_channel = self.request.get('channel')                    # Channel enables the use of the channel API
 
     if (name == '' or not num_slides.isdigit()):                       # If the parameters aren't correct then let them know
       self.error(500)
@@ -43,12 +42,10 @@ class RegisterHandler(webapp.RequestHandler):
       p = Presentation(Name=name, NumberSlides=int(num_slides))     # Create a new presentation
       p.put()                                                       # creates a default basic presentation
 
-      if enable_channel:                                            # if channel is provided at all, then we create a channel token and update the data structure
-        p.Token = channel.create_channel(str(p.key().id()));    
-        p.put()
+      token = channel.create_channel(str(p.key().id()));              
 
       self.response.headers['Content-Type'] = 'application/json'
-      self.response.out.write(simplejson.dumps({"id": p.key().id(), "token": p.Token})) # Send out the json id and optional channel token
+      self.response.out.write(simplejson.dumps({"id": p.key().id(), "token": token})) # Send out the json id and optional channel token
 
   # Deletes a session id if exists
   # This will signify the end of a session
@@ -65,89 +62,51 @@ class RegisterHandler(webapp.RequestHandler):
 # Handles the present page
 # Will retrieve or put new ppt events for a given id
 class PresentHandler(webapp.RequestHandler):
-  # Retreives any outstanding events for this id
-  # Ideally will be long polled
-  def get(self, pptId):
-    result = db.run_in_transaction(self.__transactionPopAll, pptId)   # We run this in a transaction (so noone adds a command while we're popping)
-    if not result[0]:                                                 # Did it fail?
-      self.error(404)                                                 # Couldn't find it so we error
-    else:                                                             # Else we convert the action string to JSON
-      self.response.headers['Content-Type'] = 'application/json'
-      self.response.out.write(simplejson.dumps({"Actions": result[1]})) # Send out the json string of actions
-
-  # Pops all actions out of the presentation item
-  # In an atomic transaction, this way we don't have to worry about 
-  # Someone adding things to the presentation while we work
-  def __transactionPopAll(self, pptId):
-    key = db.Key.from_path('Presentation',int(pptId))             # find the key if it exists, we must convert pptId to an integer
-    presentation = db.get(key)
-    if presentation == None:
-      return (False, None)
-    
-    actions = presentation.PopAllActions() or ''                  # Pop all the transactions and recommit this item to the database
-    presentation.put()
-    return (True, actions)                                        # we return the actions we popped off
 
   # Posts a new action for this id
   # This will be a one-off request made by an android app or something
   def post(self, pptId):
+    # Easy to use error function
+    def throwError(msg):
+      self.error(500)
+      self.response.out.write(msg + "\n")
+
     # Get the required post parameters
     action = self.request.get('action').lower()
     slide = self.request.get('slide')
 
-    # Check if this is a valid action
-    try:
-      if action == "goto" and not slide.isdigit():                # Do a specific check for the goto command to ensure the slide value is a digit
-        self.error(500)
-        self.response.out.write("Goto action requires the 'slide' parameter which must be a number\n")
-      else:
-        result = db.run_in_transaction(self.__transactionPushAction, pptId, action, slide)
-        if not result[0]:                                         # if result is false, we return 404
-          self.error(404)
-        else:
-          self.response.set_status(204)                           # Assuming everything ends up okay, we will set the status to 204 to indicate no content but sucess
-
-          # Check for channel
-          if result[2]:                                           # If the token parameter isn't null or '' then lets push out to the token
-            channel.send_message(pptId, simplejson.dumps({ "Actions": result[1] }))
-    except ValueError:
-      self.error(500)
-      self.response.out.write("Invalid action, must be prev, next, first, last, or goto")
-    except IndexError:                                        
-      self.error(500)
-      self.response.out.write("Invalid slide number, it must be less than the maximum number of slides")
-
-  # Pushes an action atomically onto a presentation
-  # action and slide are the request parameters, slide is only required when action goto
-  # returns False if key wasn't found, true if we succeeded also the channel token and current actions so we don't have to re-request this item from the db
-  def __transactionPushAction(self, pptId, action, slide):
+    # Get the presentation
     key = db.Key.from_path('Presentation',int(pptId))               # find the key if it exists, must convert pptId to integer
     presentation = db.get(key)                                      # find the presentation
     if (presentation == None):                                      # doesn't exist return False
-      return (False)
+      self.error(404)                                               # 404 Error
+      return
 
-    # Find the proper action
+    # Validate action so we can send it through the channel
     if action == 'prev':                                            
-      presentation.PushPreviousAction()
+      channel.send_message(pptId, simplejson.dumps({ "Action": "GP" }))     # Send the previous command
     elif action == 'next':
-      presentation.PushNextAction()
+      channel.send_message(pptId, simplejson.dumps({ "Action": "GN" }))     # Send the next command
     elif action == 'first':
-      presentation.PushFirstAction()
+      channel.send_message(pptId, simplejson.dumps({ "Action": "G1" }))     # Send the Goto Slide 1 command
     elif action == 'last':
-      presentation.PushLastAction()
+      cmd = "G" + str(presentation.NumberSlides)
+      channel.send_message(pptId, simplejson.dumps({ "Action": cmd }))      # Send the goto Slide (Last) command
     elif action == 'goto':                                        
-      presentation.PushGotoAction(int(slide))                       # We try to push this slide as the goto action
+      if not slide.isdigit():                                               # check if the slide # specified is valid
+        throwError("Goto action requires the 'slide' parameter which must be a number")
+        return
+      elif int(slide) > presentation.NumberSlides or int(slide) < 1:        # check if its within the presentation bounds
+        throwError("Invalid slide number specified")
+        return
+      else:
+        cmd = "G" + slide                                                   # Send the goto # message
+        channel.send_message(pptId, simplejson.dumps({ "Action": cmd }))
     else:
-      raise ValueError("Action Invalid")                            # Throw a value error to indicate an invalid action
+      throwError("Invalid action, must be prev, next, first, last, or goto")  # Invalid Action occurred
+      return
 
-    # Do a final check, are we going to be using a channel to submit data?
-    # If so we should clear the action list, maybe ultimately we can just only use channels
-    # But for now we will support both since the channel API only works in javascript
-    actions = presentation.Actions
-    if presentation.Token:
-      presentation.Actions = ''
-    presentation.put()                                              # Commit the changes
-    return (True, actions, presentation.Token)                      # return True to indicate we did something successfully
+    self.response.set_status(204)                           # Assuming everything ends up okay, we will set the status to 204 to indicate no content but sucess
 
 # Manages a heartbeat for an application
 class HeartbeatHandler(webapp.RequestHandler):
