@@ -61,61 +61,79 @@ class PresentHandler(webapp.RequestHandler):
   # Retreives any outstanding events for this id
   # Ideally will be long polled
   def get(self, pptId):
-    # Attempt to find the key
-    key = db.Key.from_path('Presentation',int(pptId))               # find the key if it exists, must convert pptId to integer
-    presentation = db.get(key)
-    if (presentation == None):
-      self.error(404)                                               # doesn't exist, out of luck send the 404
-    else:
-      actions = presentation.PopAllActions()                        # Get the actions
-      presentation.put()
-
-      # We convert the actions to a list so it can easily be handled in javascript
+    result = db.run_in_transaction(self.__transactionPopAll, pptId)   # We run this in a transaction (so noone adds a command while we're popping)
+    if not result[0]:                                                 # Did it fail?
+      self.error(404)                                                 # Couldn't find it so we error
+    else:                                                             # Else we convert the action string to JSON
       self.response.headers['Content-Type'] = 'application/json'
-      self.response.out.write(simplejson.dumps({"Actions": actions})) # Send out the json id
+      self.response.out.write(simplejson.dumps({"Actions": result[1]})) # Send out the json string of actions
+
+  # Pops all actions out of the presentation item
+  # In an atomic transaction, this way we don't have to worry about 
+  # Someone adding things to the presentation while we work
+  def __transactionPopAll(self, pptId):
+    key = db.Key.from_path('Presentation',int(pptId))             # find the key if it exists, we must convert pptId to an integer
+    presentation = db.get(key)
+    if presentation == None:
+      return (False, None)
+    
+    actions = presentation.PopAllActions() or ''                  # Pop all the transactions and recommit this item to the database
+    presentation.put()
+    return (True, actions)                                        # we return the actions we popped off
 
   # Posts a new action for this id
   # This will be a one-off request made by an android app or something
+  VALID_ACTIONS = ('prev','next','first','last','goto')           # "Constant" list of valid actions
   def post(self, pptId):
-    # Just makes it a bit easier to throw an error
-    # This is local so it can't be used elsewhere
-    def throwError(msg):                                            
-      self.error(500)
-      self.response.out.write(msg + '\n')
+    # Get the required post parameters
+    action = self.request.get('action').lower()
+    slide = self.request.get('slide')
 
-    # Find the presentation and set its actions
-    key = db.Key.from_path('Presentation',int(pptId))               # find the key if it exists, must convert pptId to integer
-    presentation = db.get(key)
-    if (presentation == None):
-      self.error(404)                                               # doesn't exist, out of luck send the 404
-    else:
-      self.response.set_status(204)                                 # Assuming everything ends up okay, we will set the status to 204 to indicate no content but sucess
+    # Check if this is a valid action
+    try:
+      self.VALID_ACTIONS.index(action)                            # Check to make sure its a valid action (throws a ValueError if not in the tupple
 
-      action = self.request.get('action').lower()                   # Get the action and calls the appropriate method
-      if action == 'prev':  
-        presentation.PushPreviousAction()
-        presentation.put()
-      elif action == 'next':
-        presentation.PushNextAction()
-        presentation.put()
-      elif action == 'first':
-        presentation.PushFirstAction()
-        presentation.put()
-      elif action == 'last':
-        presentation.PushLastAction()
-        presentation.put()
-      elif action == 'goto':                                        # Goto is a little more complicated
-        slide = self.request.get('slide')                           # They must give us a slide
-        if not slide.isdigit():                                     # If its not a digit throw an error
-          throwError("Goto action requires the 'slide' parameter which must be a number")
+      if action == "goto" and not slide.isdigit():                # Do a specific check for the goto command to ensure the slide value is a digit
+        self.error(500)
+        self.response.out.write("Goto action requires the 'slide' parameter which must be a number\n")
+      else:
+        result = db.run_in_transaction(self.__transactionPushAction, pptId, action, slide)
+        if not result:                                            # if result is false, we return 404
+          self.error(404)
         else:
-          try:
-            presentation.PushGotoAction(int(slide))                 # we try to push this slide as the goto action
-            presentation.put()
-          except IndexError:                                        # this will occur if its greater than the number of slides
-            throwError("Invalid slide number, it must be less than the maximum number of slides")
-      else:                                                         # This occures if the its not one of the prespecified actions
-        throwError("Invalid action, must be prev, next, first, last, or goto")
+          self.response.set_status(204)                           # Assuming everything ends up okay, we will set the status to 204 to indicate no content but sucess
+    except ValueError:
+      self.error(500)
+      self.response.out.write("Invalid action, must be prev, next, first, last, or goto")
+    except IndexError:                                        
+      self.error(500)
+      self.response.out.write("Invalid slide number, it must be less than the maximum number of slides")
+
+  # Pushes an action atomically onto a presentation
+  # action and slide are the request parameters, slide is only required when action goto
+  # returns False if key wasn't found, true if we succeeded
+  def __transactionPushAction(self, pptId, action, slide):
+    key = db.Key.from_path('Presentation',int(pptId))               # find the key if it exists, must convert pptId to integer
+    presentation = db.get(key)                                      # find the presentation
+    if (presentation == None):                                      # doesn't exist return False
+      return False
+
+    # Find the proper action
+    if action == 'prev':                                            
+      presentation.PushPreviousAction()
+    elif action == 'next':
+      presentation.PushNextAction()
+    elif action == 'first':
+      presentation.PushFirstAction()
+    elif action == 'last':
+      presentation.PushLastAction()
+    elif action == 'goto':                                        
+      presentation.PushGotoAction(int(slide))                       # We try to push this slide as the goto action
+    else:
+      raise ValueError("Action Invalid")                            # Throw a value error to indicate an invalid action
+
+    presentation.put()                                              # Commit the changes
+    return True                                                     # return True to indicate we did something successfully
 
 # Application Object
 application = webapp.WSGIApplication( 
